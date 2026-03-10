@@ -9,12 +9,18 @@
 
 #include "generator.hpp"
 
-namespace ttg {}
+namespace ttg {
+
+Table create_table(std::string_view expression) { return {}; }
+
+void display_table(const Table &table) {}
+
+} // namespace ttg
 
 int main(int argc, char **argv) {
   using namespace ttg;
   if (argc != 2) {
-    std::cerr << "Usage: ./generator <BOOLEAN EXPRESSION>";
+    std::cerr << "Usage: ./generator <BOOLEAN EXPRESSION>" << std::endl;
     return EXIT_FAILURE;
   }
 #ifdef _TTG_CATCH_EXCEPTION_AT_MAIN
