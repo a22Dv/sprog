@@ -1,8 +1,6 @@
 #include "lexer.hpp"
 
 #include <cctype>
-#include <format>
-#include <iostream>
 #include <span>
 #include <stack>
 #include <stdexcept>
@@ -124,6 +122,7 @@ void lexer_set_punctuators(std::span<Token> pretokenized)
  */
 void lexer_identifier(std::span<Token> tokens)
 {
+    // EOF token is required to flush the stream at the end.
     static const TokenMap &tmap = TokenMap::get_instance();
     for (isize i = 0, j = 0; i < tokens.size();) {
         const Token &token = tokens[i];
@@ -133,7 +132,7 @@ void lexer_identifier(std::span<Token> tokens)
         }
         const isize window_size = i - j;
         if (window_size == 0) {
-            j = ++i;  // Skip empty window.
+            j = ++i; 
             continue;
         }
 
@@ -185,7 +184,9 @@ void lexer_discard_remainders(std::vector<Token> &tokens)
             case TokenType::INDETERMINATE_DISCARD:
             case TokenType::END_OF_FILE: break;
             default:
-                std::swap(tokens[i], tokens[j]);
+                if (i != j) {
+                    tokens[j] = std::move(tokens[i]);
+                }
                 ++j;
                 break;
         }
@@ -206,9 +207,6 @@ std::vector<Token> run_lexer(std::string_view expression)
     lexer_identifier(tokens);
     lexer_set_variables(tokens);
     lexer_discard_remainders(tokens);
-    for (auto tk : tokens) {
-        std::cout << std::format("{}(\"{}\")\n", tmap.get_name(tk.type), tk.data);
-    }
     return tokens;
 }
 
