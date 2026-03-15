@@ -40,7 +40,7 @@
     X(Xnor, XNOR, Nor, binary)                           \
     X(Nor, NOR, And, binary)                             \
     X(And, AND, Nand, binary)                            \
-    X(Nand, NAND, NotPrfx, binary)                       \
+    X(Nand, NAND, NotPstfx, binary)                      \
     X(NotPstfx, NOT_PSTFX, NotPrfx, unary_pstfx)         \
     X(NotPrfx, NOT_PRFX, Primary, unary_prfx)
 
@@ -115,9 +115,7 @@ struct ASTNodePrimary {
 #undef _LGE_AST_TEMPLATE
 
 #define _LGE_AST_NAME(name, case) ASTNode##name,
-
 using ASTNode = std::variant<_AST_NODES(_LGE_AST_NAME) ASTNodePrimary>;
-
 #undef _LGE_AST_NAME
 
 struct ASTTree {

@@ -91,7 +91,17 @@ ASTTree get_ast(std::vector<Token> &tokens)
         }
         tree.columns.push_back({smap[entry.first], remap[entry.second[0]]});
     }
-    std::sort(variables.begin(), variables.end());
+    std::sort(variables.begin(), variables.end(), [&](auto &a, auto &b) {
+        const auto &astr = tree.subexpressions[a.first];
+        const auto &bstr = tree.subexpressions[b.first];
+        if (astr.size() != bstr.size()) {
+            const isize minlen = std::min(astr.size(), bstr.size());
+            const std::string_view min_a(astr.begin(), astr.begin() + minlen);
+            const std::string_view min_b(bstr.begin(), bstr.begin() + minlen);
+            return min_a < min_b;
+        }
+        return astr < bstr;
+    });
     std::sort(tree.columns.begin(), tree.columns.end(), [&](auto a, auto b) {
         return tree.subexpressions[a.first].size() < tree.subexpressions[b.first].size();
     });
