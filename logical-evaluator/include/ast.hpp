@@ -128,6 +128,7 @@ struct ASTTree {
     std::vector<std::pair<isize, isize>> columns{};
     std::vector<ASTNode> nodes{};
     std::vector<std::string> subexpressions{};
+    isize varcount = 0;
 };
 
 //---------------------------------------------------------------------------------------------//
@@ -187,7 +188,6 @@ struct ASTNodeEvaluator {
         }
         evaluated[remap[id]] = true;
     }
-    
 
     _AST_BINARY_NODE_OPS(_AST_EVAL_BINARY_OPERATOR)
     _AST_SPEC_NODE_OPS(_AST_EVAL_SPEC_OPERATOR)
@@ -254,6 +254,9 @@ struct ASTNodeParsing {
         static ASTNode conf{ASTNodeConstantFalse{}};
         static ASTNode var{ASTNodeVariable{}};
 
+        if (current_count >= tokenlist.size()) {
+            throw std::runtime_error("PARSE_ERR_UNEXPECTED_EOF");
+        }
         const TokenType ctok = tokenlist[current_count].type;
         bool is_punctuator = false;
         bool is_open_punctuator = false;
@@ -289,7 +292,7 @@ struct ASTNodeParsing {
     {
         const static ASTNode next_node{next()};
         isize lhs = std::visit(*this, next_node);
-        while (tokenlist[current_count].type == ttype) {
+        while (current_count < tokenlist.size() && tokenlist[current_count].type == ttype) {
             const isize tkid = current_count;
             ++current_count;
             isize rhs = std::visit(*this, next_node);
@@ -304,7 +307,7 @@ struct ASTNodeParsing {
     {
         const static ASTNode next_node{next()};
         isize lhs = std::visit(*this, next_node);
-        while (tokenlist[current_count].type == ttype) {
+        while (current_count < tokenlist.size() && tokenlist[current_count].type == ttype) {
             const isize tkid = current_count;
             ++current_count;
             nodes.push_back(current(lhs, -1, tkid, nodes.size()));
@@ -317,7 +320,7 @@ struct ASTNodeParsing {
     isize parse_unary_prfx()
     {
         const static ASTNode next_node{next()};
-        if (tokenlist[current_count].type == ttype) {
+        if (current_count < tokenlist.size() && tokenlist[current_count].type == ttype) {
             const isize tkid = current_count;
             ++current_count;
             isize rhs = parse_unary_prfx<ttype, next, current>();
@@ -333,10 +336,10 @@ struct ASTNodeParsing {
 
 //---------------------------------------------------------------------------------------------//
 
-#define _AST_FORMAT_SIG(name, l, r)                                \
-    std::string operator()(ASTNode##name &node)                    \
-    {                                                              \
-        return format<l, r>(node.token_id, node.left, node.right); \
+#define _AST_FORMAT_SIG(name, l, r)                                       \
+    void operator()(ASTNode##name &node)                                  \
+    {                                                                     \
+        format<l, r>(node.token_id, node.node_id, node.left, node.right); \
     }
 
 struct ASTNodeFormatter {
@@ -345,43 +348,34 @@ struct ASTNodeFormatter {
     std::vector<std::string> &subexprs;
 
     template <bool el, bool er>
-    std::string format(isize id, isize li, isize ri)
+    void format(isize token_id, isize node_id, isize li, isize ri)
     {
-        const std::string left = [&] {
-            if constexpr (el) {
-                if (subexprs[li].empty()) {
-                    return std::visit(*this, nodes[li]);
-                }
-                return subexprs[li];
-            } else {
-                return "";
+        if constexpr (el) {
+            if (subexprs[li].empty()) {
+                std::visit(*this, nodes[li]);
             }
-        }();
-        const std::string right = [&] {
-            if constexpr (er) {
-                if (subexprs[ri].empty()) {
-                    return std::visit(*this, nodes[ri]);
-                }
-                return subexprs[ri];
-            } else {
-                return "";
+        }
+        if constexpr (er) {
+            if (subexprs[ri].empty()) {
+                std::visit(*this, nodes[ri]);
             }
-        }();
+        }
         if constexpr (er && el) {
-            return "(" + left + " " + tokenlist[id].data + " " + right + ")";
+            const std::string &left = subexprs[li];
+            const std::string &right = subexprs[ri];
+            subexprs[node_id] = "(" + left + " " + tokenlist[token_id].data + " " + right + ")";
         } else if (er) {
-            return tokenlist[id].data + right;
+            subexprs[node_id] = tokenlist[token_id].data + subexprs[ri];
         } else if (el) {
-            return left + tokenlist[id].data;
+            subexprs[node_id] = subexprs[li] + tokenlist[token_id].data;
         } else {
-            return tokenlist[id].data;
+            subexprs[node_id] = tokenlist[token_id].data;
         }
     }
     _AST_FORMAT_ENTRY(_AST_FORMAT_SIG)
-    std::string operator()(ASTNodePrimary &node)
+    void operator()(ASTNodePrimary &node)
     {
         // No-op. Sole purpose is to centralize handling in parser.
-        return "";
     }
 };
 
@@ -402,6 +396,9 @@ struct ASTNodeVisitor {
         return {node.left, node.right, node.token_id, node.node_id};
     }
 };
+
+ASTTree get_ast(std::vector<Token> &tokens);
+std::string get_formatted_ast(ASTTree &tree);
 
 }  // namespace lge
 

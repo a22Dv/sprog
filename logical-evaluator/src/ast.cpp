@@ -1,10 +1,13 @@
 #include "ast.hpp"
 
+#include <format>
 #include <map>
 #include <string>
 #include <utility>
 #include <variant>
 #include <vector>
+
+#include "types.hpp"
 
 namespace lge
 {
@@ -15,12 +18,12 @@ ASTTree get_ast(std::vector<Token> &tokens)
     static ASTNode start = ASTNodeBiconditional{};
 
     ASTNodeParsing nparse{tree.nodes, tokens, 0};
-    const isize root = std::visit(nparse, start);  // Start parsing at highest level.
+    const isize root = std::visit(nparse, start);  // Start parsing at highest level. Standard RDP
 
     // Now, the number of nodes is defined
     tree.subexpressions.resize(tree.nodes.size());
     ASTNodeFormatter nformat{tree.nodes, tokens, tree.subexpressions};
-    const std::string lstr = std::visit(nformat, start);
+    std::visit(nformat, tree.nodes.back());
 
     // Each subexpression string maps to several
     // indices if duplicate subexpressions are
@@ -42,12 +45,12 @@ ASTTree get_ast(std::vector<Token> &tokens)
             it->second.push_back(i);
         }
     }
+    tree.varcount = varcount;
+
     // Number of variables multiplied by number of unique subexpressions.
     const isize n_exprs = mapped_subexprs.size();
     const isize n_entries = 1 << varcount;
     tree.values.resize(n_entries * n_exprs);
-    tree.columns.resize(n_exprs);
-
     std::vector<isize> remap(tree.nodes.size());
     std::vector<bool> evaluated(n_exprs);
     for (isize cvar = 0, idx = 0; auto &entry : mapped_subexprs) {
@@ -75,14 +78,60 @@ ASTTree get_ast(std::vector<Token> &tokens)
 
     // (Subexpression, Values) index in sorted order, by length,
     // then variables at leftmost sorted alphabetically.
-
-    /// TODO: Implementation. 
-    /// Iterate through each unique subexpression in the map, find its index
-    /// in the subexpression string array, use said index to get the corresponding node,
-    /// use remap to get the corresponding column index of said node index.
-    /// Skip variables. Sort by string length then alphabetically, but before the variables
-    /// are put at the beginning, sorted alphabetically.
+    std::unordered_map<std::string, isize> smap = {};
+    for (isize i = 0; i < tree.subexpressions.size(); ++i) {
+        smap[tree.subexpressions[i]] = i;
+    }
+    std::vector<std::pair<isize, isize>> variables{};
+    for (auto entry : mapped_subexprs) {
+        const auto [l, r, t, n] = std::visit(ASTNodeVisitor{}, tree.nodes[entry.second[0]]);
+        if (tokens[t].type == TokenType::VARIABLE) {
+            variables.push_back({smap[entry.first], remap[entry.second[0]]});
+            continue;
+        }
+        tree.columns.push_back({smap[entry.first], remap[entry.second[0]]});
+    }
+    std::sort(variables.begin(), variables.end());
+    std::sort(tree.columns.begin(), tree.columns.end(), [&](auto a, auto b) {
+        return tree.subexpressions[a.first].size() < tree.subexpressions[b.first].size();
+    });
+    for (auto &c : tree.columns) {
+        variables.push_back(c);  // Actual columns are appended at the end.
+    }
+    std::swap(tree.columns, variables);
     return tree;
+}
+
+std::string get_formatted_ast(ASTTree &tree)
+{
+    std::string formatted_output{};
+    for (isize i = 0; i < tree.columns.size(); ++i) {
+        formatted_output.append(tree.subexpressions[tree.columns[i].first]);
+        if (i < tree.columns.size() - 1) {
+            formatted_output.append("   ");
+        }
+    }
+    formatted_output.append("\n");
+    formatted_output.append(std::string(formatted_output.size() - 1, '='));
+    formatted_output.append("\n");
+    const isize rcount = (1 << tree.varcount);
+    for (isize i = 0; i < rcount; ++i) {
+        for (isize j = 0; j < tree.columns.size(); ++j) {
+            const isize hlen = tree.subexpressions[tree.columns[j].first].size();
+            const u8 val = tree.values[tree.columns[j].second * rcount + i];
+            const std::string leading_ansi = val ? "\x1B[1;32m" : "\x1B[1;31m";
+            const std::string strval = val ? "T" : "F";
+            const std::string formatted = std::format("{:^{}}", strval, hlen);
+            formatted_output.append(leading_ansi);
+            formatted_output.append(formatted);
+            formatted_output.append("\x1B[0m");
+            if (j < tree.columns.size() - 1) {
+                formatted_output.append("   ");
+            }
+        }
+        formatted_output.append("\n");
+    }
+    return formatted_output;
 }
 
 }  // namespace lge
