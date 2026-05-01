@@ -1,3 +1,3 @@
-# school-snippets
+# sprog
 
-A bunch of mini-programs based on school topics compiled into one repository.
+Some small programs based on school topics compiled into one repository.
